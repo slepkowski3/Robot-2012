@@ -25,16 +25,30 @@ void MTR_PSOC_SPI(void);
 void Motorpsoc_Foreward(void);
 void Motorpsoc_ClrBuf(void);
 
+
+
 #define MA_DUTY   (MTR_PSOC_TX_BUF[0])
 #define MB_DUTY   (MTR_PSOC_TX_BUF[1])
 #define MA_CTL   (MTR_PSOC_TX_BUF[2])
 #define MB_CTL   (MTR_PSOC_TX_BUF[3])
 
-#define DIR_MASK 	  0b10000000
-#define BRAKE_MASK 	0b01000000
-#define COAST_MASK 	0b00100000
-#define RESET_MASK 	0b00001000
-#define HALFBRIDGE_MASK 	0b00000001
+#define DIR_MASK            0x80//0b10000000
+#define BRAKE_MASK          0x40//0b01000000
+#define COAST_MASK          0x20//0b00100000
+#define RESET_MASK          0x08//0b00001000
+#define HALFBRIDGE_MASK     0x01//0b00000001
+
+/**************************************************
+ *
+ *
+ * Set up a timer to control the SPI
+ *
+ *************************************************/
+void timerinit(void);
+
+
+
+
 
 
 char min_data[DATA_WORDS];
@@ -61,12 +75,16 @@ int main()
     init();
     //zero_dc();
     XBLNK = 1;
+    timerinit();
     Motorpsoc_ClrBuf();
     Motorpsoc_Foreward();
     while(1)
     {
-        MTR_PSOC_SPI();
-    Delay(1000);
+        if(IFS0bits.T1IF){
+            XBLNK != XBLNK;
+            IFS0bits.T1IF = 0;
+            MTR_PSOC_SPI();
+        }
     }
 }
 
@@ -142,8 +160,10 @@ void update_display() {
 }
 void MTR_PSOC_SPI(){
     int i;
+    SPI1BUF = 0x55;
     PSOC_SS = 0;
-    for(i = 0; i < PSOC_TX_LENGTH; i++)
+    while(!SPI1STATbits.SPITBF);
+    for(i = 0; i < PSOC_TX_LENGTH; i--)
     {
         SPI1BUF = MTR_PSOC_TX_BUF[i];
         while(!SPI1STATbits.SPITBF);
@@ -168,6 +188,8 @@ void MTR_PSOC_SPI_INIT(){
     __builtin_write_OSCCONL(0x46);
     __builtin_write_OSCCONL(0x57);
     __builtin_write_OSCCONL(0x57);          // Lock Peripherals
+
+
     
 }
 
@@ -223,12 +245,27 @@ void Motorpsoc_ClrBuf() {
   MB_DUTY = 0;
   MA_CTL = 0;
   MB_CTL = 0;
-  MTR_PSOC_TX_BUF[4] = 0;
-  MTR_PSOC_TX_BUF[5] = 0;
-  MTR_PSOC_TX_BUF[6] = 0;
-  MTR_PSOC_TX_BUF[7] = 0;
-  MTR_PSOC_TX_BUF[8] = 0;
-  MTR_PSOC_TX_BUF[9] = 0;
-  MTR_PSOC_TX_BUF[10] = 0;
-  MTR_PSOC_TX_BUF[11] = 0;
+  MTR_PSOC_TX_BUF[4] = 0xaa;
+  MTR_PSOC_TX_BUF[5] = 0xaa;
+  MTR_PSOC_TX_BUF[6] = 0xaa;
+  MTR_PSOC_TX_BUF[7] = 0xaa;
+  MTR_PSOC_TX_BUF[8] = 0xaa;
+  MTR_PSOC_TX_BUF[9] = 0xaa;
+  MTR_PSOC_TX_BUF[10] = 0xaa;
+  MTR_PSOC_TX_BUF[11] = 0xaa;
+}
+
+void timerinit(){
+    
+    T1CONbits.TON = 0; // Disable Timer
+    T1CONbits.TCS = 0; // Select internal instruction cycle clock
+    T1CONbits.TGATE = 0; // Disable Gated Timer mode
+    T1CONbits.TCKPS = 0b11; // Select 1:1 Prescaler
+    TMR1 = 0x00;  // Clear timer register
+    PR1 = 0x7FFF;  // Load the period value
+    IPC0bits.T1IP = 0x01; // Set Timer1 Interrupt Priority Level
+    IFS0bits.T1IF = 0; // Clear Timer1 Interrupt Flag
+    IEC0bits.T1IE = 0; // Enable Timer1 interrupt
+    T1CONbits.TON = 1; // Start Timer
+
 }
